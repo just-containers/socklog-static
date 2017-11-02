@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -e
+
+#assumes you already have
+#binfmt-support and
+#qemu-user-static installed
+
+BUSYBOX_CHROOT_RELEASE=v1.0.0
+BUSYBOX_CHROOT_SRC="https://github.com/just-containers/busybox-chroots/releases/download/${BUSYBOX_CHROOT_RELEASE}"
+
+CHROOTDIR=$(pwd)/chroots
+BUILDDIR=$(pwd)/builds
+PACKAGEDIR=$(pwd)/pkg
+DISTDIR=$(pwd)/dist
+
+mkdir -p "$BUILDDIR"
+mkdir -p "$PACKAGEDIR"
+mkdir -p "$DISTDIR"
+mkdir -p "$CHROOTDIR"
+
+declare -A qemu_targets
+qemu_targets[x86_64-linux-musl]=qemu-x86_64-static
+qemu_targets[arm-linux-musleabihf]=qemu-arm-static
+qemu_targets[arm-linux-musleabi]=qemu-arm-static
+qemu_targets[i486-linux-musl]=qemu-i386-static
+qemu_targets[aarch64-linux-musl]=qemu-aarch64-static
+
+# target platforms + simplified
+# platform
+declare -A targets
+targets[arm-linux-musleabi]=arm
+targets[arm-linux-musleabihf]=armhf
+targets[aarch64-linux-musl]=aarch64
+targets[x86_64-linux-musl]=amd64
+targets[i486-linux-musl]=x86
+
+# software versions
+declare -A versions
+versions[socklog]=2.1.0
+
+cd "$BUILDDIR"
+curl -R -L -O http://smarden.org/socklog/socklog-${versions[socklog]}.tar.gz
+
+for target in "${!targets[@]}"; do
+    echo "Building socklog for $target..."
+    mkdir -p "$CHROOTDIR/$target"
+
+    curl -R -L -o "$CHROOTDIR/chroot-${targets[$target]}.tar.gz" \
+      "$BUSYBOX_CHROOT_SRC/chroot-${targets[$target]}.tar.gz"
+    tar xf "$CHROOTDIR/chroot-${targets[$target]}.tar.gz" -C "$CHROOTDIR/$target"
+
+    mkdir -p "$CHROOTDIR/$target/src"
+    tar xf "$BUILDDIR/socklog-${versions[socklog]}.tar.gz" -C "$CHROOTDIR/$target/src"
+
+    echo "/usr/bin/gcc -Wall -Wextra -fPIC -D_GNU_SOURCE -g0 -Os" > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-cc"
+    echo "/usr/bin/gcc -static -s"          > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-ld"
+    echo "#!/bin/sh" > "$CHROOTDIR/$target/src/compile"
+    echo "cd /src/admin/socklog-${versions[socklog]} && ./package/compile" >> $CHROOTDIR/$target/src/compile
+    chmod +x $CHROOTDIR/$target/src/compile
+
+    sudo mount -t proc proc $CHROOTDIR/${target}/proc/
+    sudo mount --rbind /sys $CHROOTDIR/${target}/sys/
+    sudo mount --rbind /dev $CHROOTDIR/${target}/dev/
+
+    cp /usr/bin/${qemu_targets[$target]} $CHROOTDIR/${target}/usr/bin/
+
+    sudo env -i /usr/sbin/chroot $CHROOTDIR/${target} /src/compile
+
+    mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin
+    mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/doc/socklog-${versions[socklog]}
+
+    mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man8
+    mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man1
+
+    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/command/* $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin
+    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/doc/* $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/doc/socklog-${versions[socklog]}/
+    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/man/*.8 $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man8/
+    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/man/*.1 $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man1/
+    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/package/COPYING $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/doc/socklog-${versions[socklog]}/
+
+    tar -cvzf $DISTDIR/socklog-${versions[socklog]}-linux-${targets[${target}]}.tar.gz \
+      --owner 0 \
+      --group 0 \
+      -C $BUILDDIR/${target}/socklog-${versions[socklog]} .
+
+
+done
+
