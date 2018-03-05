@@ -84,7 +84,7 @@ for target in "${!targets[@]}"; do
     echo "gcc -Wall -Wextra -fPIC -D_GNU_SOURCE -g0 -Os" > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-cc"
     echo "gcc -static -s"          > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-ld"
 
-    env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+    env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin" PROOT_NO_SECCOMP=1 \
       $TOOLSDIR/bin/proot \
       -S $CHROOTDIR/${target} \
       -w /src/admin/socklog-${versions[socklog]}/compile \
