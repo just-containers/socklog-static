@@ -5,10 +5,10 @@ dist: trusty
 
 
 install:
-  - openssl aes-256-cbc -K $OPENSSL_KEY -iv $OPENSSL_IV -in just-containers/keys.tar.xz.enc -out just-containers/keys.tar.xz -d
-  - tar xf just-containers/keys.tar.xz -C just-containers
-  - gpg --import just-containers/keys/public.key
-  - gpg --allow-secret-key-import --import just-containers/keys/private.key
+  - openssl aes-256-cbc -K $OPENSSL_KEY -iv $OPENSSL_IV -in keys.tar.xz.enc -out keys.tar.xz -d
+  - tar xf keys.tar.xz
+  - gpg --import keys/public.key
+  - gpg --allow-secret-key-import --import keys/private.key
 
 script:
   - bash build

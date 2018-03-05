@@ -97,7 +97,12 @@ for target in "${!targets[@]}"; do
     mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man8
     mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man1
 
-    cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/command/* $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin
+    for c in $(cat $THISDIR/admin/socklog-${versions[socklog]}/package/commands) ; do
+        cp \
+          $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/compile/$c
+          $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin/
+    done
+
     cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/doc/* $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/doc/socklog-${versions[socklog]}/
     cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/man/*.8 $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man8/
     cp $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/man/*.1 $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/man/man1/
