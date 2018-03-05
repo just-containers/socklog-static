@@ -48,7 +48,7 @@ releases[proot]="v5.1.0-2"
 releases[qemu]="v2.11.1-resin"
 
 cd "$BUILDDIR"
-set -x
+
 curl -R -L -o "$TOOLSDIR/proot-${versions[proot]}-amd64.tar.xz" \
   "https://github.com/just-containers/PRoot/releases/download/${releases[proot]}/proot-${versions[proot]}-amd64.tar.xz"
 curl -R -L -o $TOOLSDIR/qemu-${versions[qemu]}-amd64.tar.xz \
