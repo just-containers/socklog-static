@@ -5,18 +5,21 @@ set -e
 #binfmt-support and
 #qemu-user-static installed
 
-BUSYBOX_CHROOT_RELEASE=v1.0.0
+BUSYBOX_CHROOT_RELEASE=v1.0.2
 BUSYBOX_CHROOT_SRC="https://github.com/just-containers/busybox-chroots/releases/download/${BUSYBOX_CHROOT_RELEASE}"
 
-CHROOTDIR=$(pwd)/chroots
-BUILDDIR=$(pwd)/builds
-PACKAGEDIR=$(pwd)/pkg
-DISTDIR=$(pwd)/dist
+THISDIR=$(pwd)
+CHROOTDIR=${THISDIR}/chroots
+BUILDDIR=${THISDIR}/builds
+PACKAGEDIR=${THISDIR}/pkg
+DISTDIR=${THISDIR}/dist
+TOOLSDIR=${THISDIR}/tools
 
 mkdir -p "$BUILDDIR"
 mkdir -p "$PACKAGEDIR"
 mkdir -p "$DISTDIR"
 mkdir -p "$CHROOTDIR"
+mkdir -p "$TOOLSDIR"
 
 declare -A qemu_targets
 qemu_targets[x86_64-linux-musl]=qemu-x86_64-static
@@ -37,9 +40,25 @@ targets[i486-linux-musl]=x86
 # software versions
 declare -A versions
 versions[socklog]=2.1.0
+versions[proot]="5.1.0"
+versions[qemu]="2.11.1"
+
+declare -A releases
+releases[proot]="v5.1.0-2"
+releases[qemu]="v2.11.1-resin"
 
 cd "$BUILDDIR"
-curl -R -L -O http://smarden.org/socklog/socklog-${versions[socklog]}.tar.gz
+set -x
+curl -R -L -o "$TOOLSDIR/proot-${versions[proot]}-amd64.tar.xz" \
+  "https://github.com/just-containers/PRoot/releases/download/${releases[proot]}/proot-${versions[proot]}-amd64.tar.xz"
+curl -R -L -o $TOOLSDIR/qemu-${versions[qemu]}-amd64.tar.xz \
+  "https://github.com/just-containers/qemu/releases/download/${releases[qemu]}/qemu-${versions[qemu]}-amd64.tar.xz"
+curl -R -L -o "$TOOLSDIR/github-release.tar.bz2" \
+  "https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2"
+
+tar xf $TOOLSDIR/proot-${versions[proot]}-amd64.tar.xz -C $TOOLSDIR
+tar xf $TOOLSDIR/qemu-${versions[qemu]}-amd64.tar.xz -C $TOOLSDIR
+tar xf $TOOLSDIR/github-release.tar.bz2 -C $TOOLSDIR/bin --strip-components=3
 
 for target in "${!targets[@]}"; do
     echo "Building socklog for $target..."
@@ -50,21 +69,27 @@ for target in "${!targets[@]}"; do
     tar xf "$CHROOTDIR/chroot-${targets[$target]}.tar.gz" -C "$CHROOTDIR/$target"
 
     mkdir -p "$CHROOTDIR/$target/src"
-    tar xf "$BUILDDIR/socklog-${versions[socklog]}.tar.gz" -C "$CHROOTDIR/$target/src"
+    rm -rf "$CHROOTDIR/$target/src/admin"
+    cp -r "$THISDIR/admin" "$CHROOTDIR/$target/src/"
 
-    echo "/usr/bin/gcc -Wall -Wextra -fPIC -D_GNU_SOURCE -g0 -Os" > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-cc"
-    echo "/usr/bin/gcc -static -s"          > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-ld"
-    echo "#!/bin/sh" > "$CHROOTDIR/$target/src/compile"
-    echo "cd /src/admin/socklog-${versions[socklog]} && ./package/compile" >> $CHROOTDIR/$target/src/compile
-    chmod +x $CHROOTDIR/$target/src/compile
+    mkdir -p "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/compile"
+    echo "/src/admin/socklog-${versions[socklog]}" > \
+      "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/compile/home"
+    ln -s "/src/admin/socklog-${versions[socklog]}/src" "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/compile/src"
+    for p in "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/"* ; do
+      f=$(basename "$p")
+      ln -s src/$f "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/compile/$f"
+    done
 
-    sudo mount -t proc proc $CHROOTDIR/${target}/proc/
-    sudo mount --rbind /sys $CHROOTDIR/${target}/sys/
-    sudo mount --rbind /dev $CHROOTDIR/${target}/dev/
+    echo "gcc -Wall -Wextra -fPIC -D_GNU_SOURCE -g0 -Os" > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-cc"
+    echo "gcc -static -s"          > "$CHROOTDIR/$target/src/admin/socklog-${versions[socklog]}/src/conf-ld"
 
-    cp /usr/bin/${qemu_targets[$target]} $CHROOTDIR/${target}/usr/bin/
-
-    sudo env -i /usr/sbin/chroot $CHROOTDIR/${target} /src/compile
+    env -i PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+      $TOOLSDIR/bin/proot \
+      -S $CHROOTDIR/${target} \
+      -w /src/admin/socklog-${versions[socklog]}/compile \
+      -q "$TOOLSDIR/bin/${qemu_targets[$target]}" \
+      make -j$(nproc)
 
     mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin
     mkdir -p $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/share/doc/socklog-${versions[socklog]}
