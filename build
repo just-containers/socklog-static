@@ -99,7 +99,7 @@ for target in "${!targets[@]}"; do
 
     for c in $(cat $THISDIR/admin/socklog-${versions[socklog]}/package/commands) ; do
         cp \
-          $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/compile/$c
+          $CHROOTDIR/${target}/src/admin/socklog-${versions[socklog]}/compile/$c \
           $BUILDDIR/${target}/socklog-${versions[socklog]}/usr/bin/
     done
 
